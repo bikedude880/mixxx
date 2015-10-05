@@ -115,9 +115,10 @@ MixxxMainWindow::MixxxMainWindow(QApplication* pApp, const CmdlineArgs& args)
           m_cmdLineArgs(args),
           m_iNumConfiguredDecks(0) {
     logBuildDetails();
-    initializeWindow();
 
     initMenuBar();
+
+    initializeWindow();
 
     // Check to see if this is the first time this version of Mixxx is run
     // after an upgrade and make any needed changes.
@@ -723,7 +724,9 @@ void MixxxMainWindow::logBuildDetails() {
         buildInfo.append(
             QString("git r%2").arg(buildRevision));
     }
+#ifndef DISABLE_BUILDTIME // buildtime=1, on by default
     buildInfo.append("built on: " __DATE__ " @ " __TIME__);
+#endif
     if (!buildFlags.isEmpty()) {
         buildInfo.append(QString("flags: %1").arg(buildFlags.trimmed()));
     }
@@ -742,10 +745,17 @@ void MixxxMainWindow::logBuildDetails() {
 }
 
 void MixxxMainWindow::initializeWindow() {
+    // be sure initMenuBar() is called first
+
     QPalette Pal(palette());
+    // safe default QMenuBar background
+    QColor MenuBarBackground(m_pMenuBar->palette().color(QPalette::Background));
     Pal.setColor(QPalette::Background, QColor(0x202020));
     setAutoFillBackground(true);
     setPalette(Pal);
+    // restore default QMenuBar background
+    Pal.setColor(QPalette::Background, MenuBarBackground);
+    m_pMenuBar->setPalette(Pal);
 
     setWindowIcon(QIcon(":/images/ic_mixxx_window.png"));
     slotUpdateWindowTitle(TrackPointer());
@@ -1170,6 +1180,7 @@ void MixxxMainWindow::initActions()
     m_pFileQuit->setShortcutContext(Qt::ApplicationShortcut);
     m_pFileQuit->setStatusTip(quitText);
     m_pFileQuit->setWhatsThis(buildWhatsThis(quitTitle, quitText));
+    m_pFileQuit->setMenuRole(QAction::QuitRole);
     connect(m_pFileQuit, SIGNAL(triggered()), this, SLOT(slotFileQuit()));
 
     QString rescanTitle = tr("&Rescan Library");
@@ -1263,16 +1274,18 @@ void MixxxMainWindow::initActions()
     m_pOptionsPreferences->setShortcutContext(Qt::ApplicationShortcut);
     m_pOptionsPreferences->setStatusTip(preferencesText);
     m_pOptionsPreferences->setWhatsThis(buildWhatsThis(preferencesTitle, preferencesText));
+    m_pOptionsPreferences->setMenuRole(QAction::PreferencesRole);
     connect(m_pOptionsPreferences, SIGNAL(triggered()),
             this, SLOT(slotOptionsPreferences()));
 
     QString externalLinkSuffix = QChar(0x21D7);
-    
+
     QString aboutTitle = tr("&About");
     QString aboutText = tr("About the application");
     m_pHelpAboutApp = new QAction(aboutTitle, this);
     m_pHelpAboutApp->setStatusTip(aboutText);
     m_pHelpAboutApp->setWhatsThis(buildWhatsThis(aboutTitle, aboutText));
+    m_pHelpAboutApp->setMenuRole(QAction::AboutRole);
     connect(m_pHelpAboutApp, SIGNAL(triggered()),
             this, SLOT(slotHelpAbout()));
 
@@ -1296,7 +1309,7 @@ void MixxxMainWindow::initActions()
     m_pHelpShortcuts->setStatusTip(shortcutsText);
     m_pHelpShortcuts->setWhatsThis(buildWhatsThis(shortcutsTitle, shortcutsText));
     connect(m_pHelpShortcuts, SIGNAL(triggered()), this, SLOT(slotHelpShortcuts()));
-    
+
     QString feedbackTitle = tr("Send Us &Feedback") + externalLinkSuffix;
     QString feedbackText = tr("Send feedback to the Mixxx team.");
     m_pHelpFeedback = new QAction(feedbackTitle, this);
@@ -1624,19 +1637,23 @@ void MixxxMainWindow::slotUpdateWindowTitle(TrackPointer pTrack) {
 }
 
 void MixxxMainWindow::initMenuBar() {
-    m_pFileMenu = new QMenu(tr("&File"), menuBar());
-    menuBar()->addMenu(m_pFileMenu);
+    m_pMenuBar = new QMenuBar(this);
+    // LaunchImage shall have same size like final GUI
+    // So draw Files menu to display MenuBar
+    m_pFileMenu = new QMenu(tr("&File"));
+    m_pMenuBar->addMenu(m_pFileMenu);
+    setMenuBar(m_pMenuBar);
 }
 
 void MixxxMainWindow::populateMenuBar() {
     // be sure initMenuBar is called first
 
     // MENUBAR
-    m_pOptionsMenu = new QMenu(tr("&Options"), menuBar());
-    m_pLibraryMenu = new QMenu(tr("&Library"),menuBar());
-    m_pViewMenu = new QMenu(tr("&View"), menuBar());
-    m_pHelpMenu = new QMenu(tr("&Help"), menuBar());
-    m_pDeveloperMenu = new QMenu(tr("&Developer"), menuBar());
+    m_pOptionsMenu = new QMenu(tr("&Options"));
+    m_pLibraryMenu = new QMenu(tr("&Library"));
+    m_pViewMenu = new QMenu(tr("&View"));
+    m_pHelpMenu = new QMenu(tr("&Help"));
+    m_pDeveloperMenu = new QMenu(tr("&Developer"));
     connect(m_pOptionsMenu, SIGNAL(aboutToShow()),
             this, SLOT(slotOptionsMenuShow()));
 
@@ -1651,7 +1668,7 @@ void MixxxMainWindow::populateMenuBar() {
     // menuBar entry optionsMenu
     //optionsMenu->setCheckable(true);
 #ifdef __VINYLCONTROL__
-    m_pVinylControlMenu = new QMenu(tr("&Vinyl Control"), menuBar());
+    m_pVinylControlMenu = new QMenu(tr("&Vinyl Control"));
     for (int i = 0; i < kMaximumVinylControlInputs; ++i) {
         m_pVinylControlMenu->addAction(m_pOptionsVinylControl[i]);
     }
@@ -1704,16 +1721,16 @@ void MixxxMainWindow::populateMenuBar() {
     m_pHelpMenu->addSeparator();
     m_pHelpMenu->addAction(m_pHelpAboutApp);
 
-    menuBar()->addMenu(m_pLibraryMenu);
-    menuBar()->addMenu(m_pViewMenu);
-    menuBar()->addMenu(m_pOptionsMenu);
+    m_pMenuBar->addMenu(m_pLibraryMenu);
+    m_pMenuBar->addMenu(m_pViewMenu);
+    m_pMenuBar->addMenu(m_pOptionsMenu);
 
     if (m_cmdLineArgs.getDeveloper()) {
-        menuBar()->addMenu(m_pDeveloperMenu);
+        m_pMenuBar->addMenu(m_pDeveloperMenu);
     }
 
-    menuBar()->addSeparator();
-    menuBar()->addMenu(m_pHelpMenu);
+    m_pMenuBar->addSeparator();
+    m_pMenuBar->addMenu(m_pHelpMenu);
 }
 
 void MixxxMainWindow::slotFileLoadSongPlayer(int deck) {
@@ -1870,20 +1887,18 @@ void MixxxMainWindow::slotViewFullScreen(bool toggle)
         // ^ This leaves a broken native Menu Bar with Ubuntu Unity Bug #1076789#
         // it is only allowed to change this prior initMenuBar()
 
-        m_NativeMenuBarSupport = menuBar()->isNativeMenuBar();
+        m_NativeMenuBarSupport = m_pMenuBar->isNativeMenuBar();
         if (m_NativeMenuBarSupport) {
-            setMenuBar(new QMenuBar(this));
-            menuBar()->setNativeMenuBar(false);
             initMenuBar();
+            m_pMenuBar->setNativeMenuBar(false);
             populateMenuBar();
         }
 #endif
     } else {
 #ifdef __LINUX__
         if (m_NativeMenuBarSupport) {
-            setMenuBar(new QMenuBar(this));
-            menuBar()->setNativeMenuBar(m_NativeMenuBarSupport);
             initMenuBar();
+            m_pMenuBar->setNativeMenuBar(m_NativeMenuBarSupport);
             populateMenuBar();
         }
         //move(m_winpos);
